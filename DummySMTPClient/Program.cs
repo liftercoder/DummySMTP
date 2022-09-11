@@ -12,7 +12,7 @@ namespace DummySMTPClient
         static void Main(string[] args)
         {
             Console.WriteLine("Starting up...");
-            using (SmtpClient client = new SmtpClient("127.0.0.1", 25))
+            using (SmtpClient client = new SmtpClient("localhost", 25))
             {
                 client.EnableSsl = true;
                 client.Send("test@from.com", "test@to.com", "asubject", "abody");

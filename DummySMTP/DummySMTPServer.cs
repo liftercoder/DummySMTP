@@ -13,6 +13,7 @@ namespace DummySMTP
 {
     public class DummySMTPServer
     {
+        const byte CR = 0x0D, LF = 0x0A;
         delegate string[] ResponseFunc(string[] parts);
         readonly int _port;
         byte[] _buffer = new byte[100000];
@@ -64,8 +65,6 @@ namespace DummySMTP
 
             AcceptClients();
         }
-
-        const byte CR = 0x0D, LF = 0x0A;
 
         private string FrameMessage(string message) => new string(message.Append('\r').Append('\n').ToArray());
 
@@ -155,11 +154,6 @@ namespace DummySMTP
             X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindBySerialNumber, certSerialNo, true)[0];
 
             stream.AuthenticateAsServer(cert, false, false);
-
-            if (!stream.IsMutuallyAuthenticated)
-            {
-                throw new AuthenticationException();
-            }
         }
 
         private string Sanitize(string message) => new string(message.Where(x => !new char[] { '\r', '\n' }.Contains(x)).ToArray());
