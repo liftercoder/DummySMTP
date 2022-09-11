@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
@@ -32,6 +31,9 @@ namespace DummySMTP
             { "DEFAULT", (string[] parts) => new string[] { OKResponse } }
         };
 
+        bool IsQuitMessage(string message) => message == "QUIT";
+        bool IsStartTLSMessage(string message) => message == "STARTTLS";
+
         public DummySMTPServer(DummySMTPServerConfig config)
         {
             _port = config.Port;
@@ -47,6 +49,7 @@ namespace DummySMTP
 
         private void AcceptClients()
         {
+            Log("Listenting for clients...");
             TcpClient client = _server.AcceptTcpClient();
             Log($"accepted connection request from: {client.Client.LocalEndPoint}");
 
@@ -99,7 +102,15 @@ namespace DummySMTP
                         stream.Write(buffer, 0, buffer.Length);
                     }
 
-                    if (message == "STARTTLS")
+                    if (IsQuitMessage(message))
+                    {
+                        Log("Disconnecting from client");
+                        _secureStream.Close();
+                        _secureStream.Dispose();
+                        return;
+                    }
+
+                    if (IsStartTLSMessage(message))
                     {
                         TlsHandshake(_certificateSerialNo, _secureStream);
                         ReceiveSecure();
@@ -128,6 +139,14 @@ namespace DummySMTP
                     string message = Sanitize(FromBytes(_buffer.Take(offset).ToArray()));
                     _messages.Add(message);
                     Log($"Received: {message}");
+
+                    if(IsQuitMessage(message))
+                    {
+                        Log("Disconnecting from client");
+                        _secureStream.Close();
+                        _secureStream.Dispose();
+                        return;
+                    }
 
                     string[] payload = GetResponsePayload(message);
 
@@ -181,7 +200,6 @@ namespace DummySMTP
             , OKResponse = "250 OK"
             , AcceptedResponse = "250 Accepted"
             , DataResponse = "354 Enter message, ending with \".\" on a line by itself"
-            , QuitResponse = "quit"
             , StartTLSResponse = "220 2.0.0 SMTP server ready"
         ;
     }
