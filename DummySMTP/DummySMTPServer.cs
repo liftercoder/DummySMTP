@@ -19,7 +19,6 @@ namespace DummySMTP
         const string _certificateSerialNo = "1567752d2866598749220a1c712f944e";
         TcpListener _server;
         List<string> _messages = new List<string>();
-        SslStream _secureStream;
         Dictionary<string, ResponseFunc> _responseConfig = new Dictionary<string, ResponseFunc>
         {
             { "HELO", (string[] parts) => new string[] { string.Format(HelloResponse, parts.ElementAt(1)), TLSResponse, OKResponse } },
@@ -57,12 +56,12 @@ namespace DummySMTP
             {
                 Log($"connected to client: {client.Client.LocalEndPoint}");
                 using (Stream stream = client.GetStream())
-                using (_secureStream = new SslStream(stream))
+                using (SslStream secureStream = new SslStream(stream))
                 {
                     string ack = FrameMessage(ReadyResponse);
                     Log($"sending: {ack}");
                     stream.Write(ToBytes(ack), 0, ack.Length);
-                    Receive(stream);
+                    Receive(stream, secureStream);
                 }
             }
 
@@ -79,7 +78,7 @@ namespace DummySMTP
 
         private string FromBytes(byte[] bytes) => Encoding.UTF8.GetString(bytes);
 
-        private void Receive(Stream stream)
+        private void Receive(Stream stream, SslStream secureStream)
         {
             int offset = 0;
 
@@ -99,21 +98,29 @@ namespace DummySMTP
                     {
                         byte[] buffer = ToBytes(FrameMessage(response));
                         Log($"Sending: {response}");
-                        stream.Write(buffer, 0, buffer.Length);
+                        try
+                        {
+                            stream.Write(buffer, 0, buffer.Length);
+                        }
+                        catch
+                        {
+                            // TODO: Log...
+                            return;
+                        }
                     }
 
                     if (IsQuitMessage(message))
                     {
                         Log("Disconnecting from client");
-                        _secureStream.Close();
-                        _secureStream.Dispose();
+                        stream.Close();
+                        stream.Dispose();
                         return;
                     }
 
                     if (IsStartTLSMessage(message))
                     {
-                        TlsHandshake(_certificateSerialNo, _secureStream);
-                        ReceiveSecure();
+                        TlsHandshake(_certificateSerialNo, secureStream);
+                        ReceiveSecure(secureStream);
                         return;
                     }
 
@@ -126,13 +133,13 @@ namespace DummySMTP
             }
         }
 
-        private void ReceiveSecure()
+        private void ReceiveSecure(SslStream stream)
         {
             int offset = 0;
 
             while (true)
             {
-                _secureStream.Read(_buffer, offset, 1);
+                stream.Read(_buffer, offset, 1);
 
                 if (EndOfMessage(offset))
                 {
@@ -143,8 +150,8 @@ namespace DummySMTP
                     if(IsQuitMessage(message))
                     {
                         Log("Disconnecting from client");
-                        _secureStream.Close();
-                        _secureStream.Dispose();
+                        stream.Close();
+                        stream.Dispose();
                         return;
                     }
 
@@ -154,7 +161,15 @@ namespace DummySMTP
                     {
                         byte[] responseBuffer = ToBytes(FrameMessage(line));
                         Log($"Sending: {line}");
-                        _secureStream.Write(responseBuffer, 0, responseBuffer.Length);
+                        try
+                        {
+                            stream.Write(responseBuffer, 0, responseBuffer.Length);
+                        }
+                        catch
+                        {
+                            // TODO: Log..
+                            return;
+                        }
                     }
 
                     offset = 0;
