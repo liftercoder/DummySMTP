@@ -207,11 +207,12 @@ namespace DummySMTP
 
         private void TlsHandshake(string certThumbprint, SslStream stream)
         {
-            X509Store certStore = new X509Store(StoreName.My, StoreLocation.LocalMachine);
-            certStore.Open(OpenFlags.ReadOnly);
-            X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindByThumbprint, certThumbprint, true)[0];
-
-            stream.AuthenticateAsServer(cert, false, false);
+            using (X509Store certStore = new X509Store(StoreName.My, StoreLocation.LocalMachine))
+            using (X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindByThumbprint, certThumbprint, true)[0])
+            {
+                certStore.Open(OpenFlags.ReadOnly);
+                stream.AuthenticateAsServer(cert, false, false);
+            }
         }
 
         private string Sanitize(string message) => new string(message.Where(x => !new char[] { '\r', '\n' }.Contains(x)).ToArray());
