@@ -12,11 +12,17 @@ namespace DummySMTP
 {
     public class DummySMTPServer
     {
+        public DummySMTPServer(DummySMTPServerConfig config)
+        {
+            _port = config.Port;
+            _tlsCertThumbprint = config.TlsCertThumbprint;
+        }
+
         const byte CR = 0x0D, LF = 0x0A;
         delegate string[] ResponseFunc(string[] parts);
         readonly int _port;
         byte[] _buffer = new byte[100000];
-        const string _certificateSerialNo = "1567752d2866598749220a1c712f944e";
+        string _tlsCertThumbprint;
         TcpListener _server;
         List<string> _messages = new List<string>();
         Dictionary<string, ResponseFunc> _responseConfig = new Dictionary<string, ResponseFunc>
@@ -32,11 +38,6 @@ namespace DummySMTP
 
         bool IsQuitMessage(string message) => message == "QUIT";
         bool IsStartTLSMessage(string message) => message == "STARTTLS";
-
-        public DummySMTPServer(DummySMTPServerConfig config)
-        {
-            _port = config.Port;
-        }
 
         public void Start()
         {
@@ -72,11 +73,15 @@ namespace DummySMTP
 
         private bool EndOfMessage(int index) => index > 0 && _buffer[index - 1] == CR && _buffer[index] == LF;
 
-        private void Log(string message) => Console.WriteLine(message);
+        private void Log(string message)
+        {
+            Console.WriteLine(message);
+            WriteLog(message);
+        }
 
-        private byte[] ToBytes(string message) => Encoding.UTF8.GetBytes(message);
+        private byte[] ToBytes(string message) => Encoding.ASCII.GetBytes(message);
 
-        private string FromBytes(byte[] bytes) => Encoding.UTF8.GetString(bytes);
+        private string FromBytes(byte[] bytes) => Encoding.ASCII.GetString(bytes);
 
         private void Receive(Stream stream, SslStream secureStream)
         {
@@ -104,7 +109,7 @@ namespace DummySMTP
                         }
                         catch
                         {
-                            // TODO: Log...
+                            Log("Couldn't write to the stream, connection gone");
                             return;
                         }
                     }
@@ -112,14 +117,14 @@ namespace DummySMTP
                     if (IsQuitMessage(message))
                     {
                         Log("Disconnecting from client");
-                        stream.Close();
-                        stream.Dispose();
                         return;
                     }
 
                     if (IsStartTLSMessage(message))
                     {
-                        TlsHandshake(_certificateSerialNo, secureStream);
+                        Log("Initiating TLS handshake");
+                        TlsHandshake(_tlsCertThumbprint, secureStream);
+                        Log("Secure channel initialized");
                         ReceiveSecure(secureStream);
                         return;
                     }
@@ -133,9 +138,15 @@ namespace DummySMTP
             }
         }
 
+        private void WriteLog(string content)
+        {
+            File.AppendAllText("log.txt", $"{DateTime.Now:G}: {content}\r\n");
+        }
+
         private void ReceiveSecure(SslStream stream)
         {
             int offset = 0;
+            bool dataMode = false;
 
             while (true)
             {
@@ -150,26 +161,37 @@ namespace DummySMTP
                     if(IsQuitMessage(message))
                     {
                         Log("Disconnecting from client");
-                        stream.Close();
-                        stream.Dispose();
                         return;
                     }
 
-                    string[] payload = GetResponsePayload(message);
-
-                    foreach (string line in payload)
+                    if (dataMode && message == ".")
                     {
-                        byte[] responseBuffer = ToBytes(FrameMessage(line));
-                        Log($"Sending: {line}");
-                        try
+                        dataMode = false;
+                    }
+
+                    if (!dataMode)
+                    {
+                        string[] payload = GetResponsePayload(message);
+
+                        foreach (string line in payload)
                         {
-                            stream.Write(responseBuffer, 0, responseBuffer.Length);
+                            byte[] responseBuffer = ToBytes(FrameMessage(line));
+                            Log($"Sending: {line}");
+                            try
+                            {
+                                stream.Write(responseBuffer, 0, responseBuffer.Length);
+                            }
+                            catch
+                            {
+                                Log("Couldn't write to the stream, connection gone");
+                                return;
+                            }
                         }
-                        catch
-                        {
-                            // TODO: Log..
-                            return;
-                        }
+                    }
+
+                    if(!dataMode && message == "DATA")
+                    {
+                        dataMode = true;
                     }
 
                     offset = 0;
@@ -181,11 +203,11 @@ namespace DummySMTP
             }
         }
 
-        private void TlsHandshake(string certSerialNo, SslStream stream)
+        private void TlsHandshake(string certThumbprint, SslStream stream)
         {
             X509Store certStore = new X509Store(StoreName.My, StoreLocation.LocalMachine);
             certStore.Open(OpenFlags.ReadOnly);
-            X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindBySerialNumber, certSerialNo, true)[0];
+            X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindByThumbprint, certThumbprint, true)[0];
 
             stream.AuthenticateAsServer(cert, false, false);
         }
@@ -213,8 +235,8 @@ namespace DummySMTP
             , HelloResponse = "250-server.test.com Hello {0}"
             , TLSResponse = "250-STARTTLS"
             , OKResponse = "250 OK"
-            , AcceptedResponse = "250 Accepted"
-            , DataResponse = "354 Enter message, ending with \".\" on a line by itself"
+            , AcceptedResponse = "250 Accepted" //, DataResponse = "354 Enter message, ending with \".\" on a line by itself"
+            , DataResponse = "354 Start mail input; end with<CR><LF>.<CR><LF>"
             , StartTLSResponse = "220 2.0.0 SMTP server ready"
         ;
     }
