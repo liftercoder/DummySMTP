@@ -16,7 +16,10 @@ namespace DummySMTPClient
             using (SmtpClient client = new SmtpClient("localhost", 25))
             {
                 client.EnableSsl = true;
-                client.Send("test@from.com", "test@to.com", "asubject", "abody");
+                for (int i = 0; i < 10; i++)
+                {
+                    client.Send("test@from.com", "test@to.com", "asubject", "abody");
+                }
             }
         }
     }

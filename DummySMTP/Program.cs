@@ -16,7 +16,7 @@ namespace DummySMTP
             }
             catch
             {
-                Console.WriteLine("Server expects the argument: -certThumbprint <thumbprint>");
+                Console.WriteLine("server expects the argument: -certThumbprint <thumbprint>");
                 Console.ReadKey();
                 return;
             }
@@ -29,8 +29,18 @@ namespace DummySMTP
             };
 
             DummySMTPServer smtpServer = new DummySMTPServer(config);
-            smtpServer.Start();
-            Console.WriteLine("Exiting...");
+
+            try
+            {
+                smtpServer.Start();
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine($"error message: {ex.Message}");
+                Console.WriteLine($"inner error message: {ex.InnerException?.Message}");
+            }
+
+            Console.WriteLine("exiting...");
             Console.ReadKey();
         }
     }

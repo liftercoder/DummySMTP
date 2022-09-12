@@ -43,13 +43,13 @@ namespace DummySMTP
         {
             _server = new TcpListener(IPAddress.Any, _port);
             _server.Start();
-            Log($"Server listening on {_port}");
+            Log($"server listening on port {_port}");
             AcceptClients();
         }
 
         private void AcceptClients()
         {
-            Log("Listenting for clients...");
+            Log("listening for new connections...");
             TcpClient client = _server.AcceptTcpClient();
             Log($"accepted connection request from: {client.Client.LocalEndPoint}");
 
@@ -156,11 +156,11 @@ namespace DummySMTP
                 {
                     string message = Sanitize(FromBytes(_buffer.Take(offset).ToArray()));
                     _messages.Add(message);
-                    Log($"Received: {message}");
+                    Log($"received: {message}");
 
                     if(IsQuitMessage(message))
                     {
-                        Log("Disconnecting from client");
+                        Log("disconnecting from client");
                         return;
                     }
 
@@ -176,14 +176,16 @@ namespace DummySMTP
                         foreach (string line in payload)
                         {
                             byte[] responseBuffer = ToBytes(FrameMessage(line));
-                            Log($"Sending: {line}");
+
+                            Log($"sending: {line}");
+
                             try
                             {
                                 stream.Write(responseBuffer, 0, responseBuffer.Length);
                             }
                             catch
                             {
-                                Log("Couldn't write to the stream, connection gone");
+                                Log("couldn't write to the stream, connection gone");
                                 return;
                             }
                         }
@@ -235,8 +237,8 @@ namespace DummySMTP
             , HelloResponse = "250-server.test.com Hello {0}"
             , TLSResponse = "250-STARTTLS"
             , OKResponse = "250 OK"
-            , AcceptedResponse = "250 Accepted" //, DataResponse = "354 Enter message, ending with \".\" on a line by itself"
-            , DataResponse = "354 Start mail input; end with<CR><LF>.<CR><LF>"
+            , AcceptedResponse = "250 Accepted"
+            , DataResponse = "354 Start mail input; end with <CR><LF>.<CR><LF>"
             , StartTLSResponse = "220 2.0.0 SMTP server ready"
         ;
     }
