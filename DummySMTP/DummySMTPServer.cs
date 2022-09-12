@@ -79,9 +79,9 @@ namespace DummySMTP
             WriteLog(message);
         }
 
-        private byte[] ToBytes(string message) => Encoding.ASCII.GetBytes(message);
+        private byte[] ToBytes(string message) => Encoding.UTF8.GetBytes(message);
 
-        private string FromBytes(byte[] bytes) => Encoding.ASCII.GetString(bytes);
+        private string FromBytes(byte[] bytes) => Encoding.UTF8.GetString(bytes);
 
         private void Receive(Stream stream, SslStream secureStream)
         {
