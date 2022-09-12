@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
@@ -49,7 +50,7 @@ namespace DummySMTP
 
         private void AcceptClients()
         {
-            Log("listening for new connections...");
+            Log("waiting for connections...");
             TcpClient client = _server.AcceptTcpClient();
             Log($"accepted connection request from: {client.Client.LocalEndPoint}");
 
@@ -75,6 +76,12 @@ namespace DummySMTP
 
         private void Log(string message)
         {
+            if(!message.Any() || message == null)
+            {
+                return;
+            }
+
+            message = $"{DateTime.Now:G}: {new string(message.Skip(1).Prepend(char.ToUpper(message[0])).ToArray())}";
             Console.WriteLine(message);
             WriteLog(message);
         }
@@ -208,10 +215,13 @@ namespace DummySMTP
         private void TlsHandshake(string certThumbprint, SslStream stream)
         {
             using (X509Store certStore = new X509Store(StoreName.My, StoreLocation.LocalMachine))
-            using (X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindByThumbprint, certThumbprint, true)[0])
             {
                 certStore.Open(OpenFlags.ReadOnly);
-                stream.AuthenticateAsServer(cert, false, false);
+
+                using (X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindByThumbprint, certThumbprint, true)[0])
+                {
+                    stream.AuthenticateAsServer(cert, false, false);
+                }
             }
         }
 

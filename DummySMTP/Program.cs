@@ -9,6 +9,9 @@ namespace DummySMTP
         {
             string certThumbprint = null;
 
+            Console.ForegroundColor = ConsoleColor.White;
+            ConsoleColor errorColor = ConsoleColor.Red;
+
             try
             {
                 int index = args.ToList().IndexOf("-certThumbprint");
@@ -16,7 +19,7 @@ namespace DummySMTP
             }
             catch
             {
-                Console.WriteLine("server expects the argument: -certThumbprint <thumbprint>");
+                Log("Error: server expects the argument: -certThumbprint <thumbprint>", errorColor);
                 Console.ReadKey();
                 return;
             }
@@ -36,12 +39,21 @@ namespace DummySMTP
             }
             catch(Exception ex)
             {
-                Console.WriteLine($"error message: {ex.Message}");
-                Console.WriteLine($"inner error message: {ex.InnerException?.Message}");
+                Log("Exception occurred", errorColor);
+                Log($"Message: {ex.Message}", errorColor);
+                Log($"Inner error message: {ex.InnerException?.Message}", errorColor);
+                Log($"Stack trace: {ex?.StackTrace}", errorColor);
             }
 
-            Console.WriteLine("exiting...");
+            Console.WriteLine("Exiting...");
             Console.ReadKey();
+        }
+
+        static void Log(string message, ConsoleColor col = ConsoleColor.White)
+        {
+            Console.ForegroundColor = col;
+            Console.WriteLine(message);
+            Console.ForegroundColor = ConsoleColor.White;
         }
     }
 }
