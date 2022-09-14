@@ -11,16 +11,45 @@ namespace DummySMTPClient
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Starting up...");
+            const string hostname = "localhost";
+            const int port = 25;
 
-            using (SmtpClient client = new SmtpClient("localhost", 25))
+            Console.WriteLine("Starting up...");
+            Console.WriteLine($"Sending emails to {hostname}:{port}");
+
+            using (SmtpClient client = new SmtpClient(hostname, port))
             {
                 client.EnableSsl = true;
                 for (int i = 0; i < 10; i++)
                 {
-                    client.Send("test@from.com", "test@to.com", "asubject", "abody");
+                    Console.WriteLine($"Sending email #{i}");
+                    try
+                    {
+                        MailMessage message = new MailMessage
+                        {
+                            IsBodyHtml = true,
+                            BodyTransferEncoding = System.Net.Mime.TransferEncoding.Base64
+                        };
+                        message.To.Add("to@to.com");
+                        message.CC.Add("cc@cc.com");
+                        message.Bcc.Add("bcc@bcc.com");
+                        message.Subject = "This is a test";
+                        message.From = new MailAddress("from@from.com", "display name");
+                        message.Body = "<h1>Hello</h1><p>This is a test</p>";
+                        client.Send(message);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to send email #{i}");
+                        Console.WriteLine($"Error message: {ex.Message} {ex.InnerException?.Message}");
+                    }
                 }
+                Console.WriteLine("Finished");
             }
+
+            Console.WriteLine("Disposing connection");
+            Console.WriteLine("End");
+            Console.ReadKey();
         }
     }
 }
