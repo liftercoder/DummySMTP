@@ -50,11 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-    <None Include="bin\Release\DummySMTP.exe.config" />
   </ItemGroup>
   <ItemGroup />
-  <ItemGroup>
-    <Content Include="bin\Release\DummySMTP.exe" />
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
