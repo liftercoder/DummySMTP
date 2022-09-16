@@ -12,16 +12,14 @@ namespace DummySMTP
             Console.ForegroundColor = ConsoleColor.White;
             ConsoleColor errorColor = ConsoleColor.Red;
 
-            try
+            if(args.Length == 2 && args[0] == "-certThumbprint")
             {
-                int index = args.ToList().IndexOf("-certThumbprint");
-                certThumbprint = args[index + 1];
+                certThumbprint = args[1];
+                Log("Starting in tls mode");
             }
-            catch
+            else
             {
-                Log("Error: server expects the argument: -certThumbprint <thumbprint>", errorColor);
-                Console.ReadKey();
-                return;
+                Log("Starting in non-secure mode");
             }
 
             DummySMTPServerConfig config = new DummySMTPServerConfig
@@ -39,8 +37,8 @@ namespace DummySMTP
             }
             catch(Exception ex)
             {
-                Log("Exception occurred", errorColor);
-                Log($"Message: {ex.Message}", errorColor);
+                Log("xception occurred", errorColor);
+                Log($"essage: {ex.Message}", errorColor);
                 Log($"Inner error message: {ex.InnerException?.Message}", errorColor);
                 Log($"Stack trace: {ex?.StackTrace}", errorColor);
             }

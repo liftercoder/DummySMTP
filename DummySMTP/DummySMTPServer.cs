@@ -24,13 +24,17 @@ namespace DummySMTP
         delegate string[] ResponseFunc(string[] parts);
         readonly int _port;
         byte[] _buffer = new byte[100000];
-        string _tlsCertThumbprint;
         TcpListener _server;
+        string _tlsCertThumbprint;
         List<string> _messages = new List<string>();
+        const string _localInboxDirectoryName = "dummy-smtp-inbox";
+        const string _logFileName = "log.txt";
+        bool IsTlsEnabled => !string.IsNullOrWhiteSpace(_tlsCertThumbprint);
+
         Dictionary<string, ResponseFunc> _responseConfig = new Dictionary<string, ResponseFunc>
         {
-            { "HELO", (string[] parts) => new string[] { string.Format(HelloResponse, parts.ElementAt(1)), TLSResponse, OKResponse } },
-            { "EHLO", (string[] parts) => new string[] { string.Format(HelloResponse, parts.ElementAt(1)), TLSResponse, OKResponse } },
+            { "HELO", (string[] parts) => new string[] { string.Format(HelloResponse, parts.ElementAt(1)), OKResponse } },
+            { "EHLO", (string[] parts) => new string[] { string.Format(HelloResponse, parts.ElementAt(1)), OKResponse } },
             { "MAIL", (string[] parts) => new string[] { OKResponse } },
             { "RCPT", (string[] parts) => new string[] { AcceptedResponse } },
             { "DATA", (string[] parts) => new string[] { DataResponse } },
@@ -45,6 +49,21 @@ namespace DummySMTP
 
         public void Start()
         {
+            if (IsTlsEnabled)
+            {
+                _responseConfig["HELO"] = (string[] parts) => new string[] { string.Format(HelloResponse, parts.ElementAt(1)), TLSResponse, OKResponse };
+                _responseConfig["EHLO"] = (string[] parts) => new string[] { string.Format(HelloResponse, parts.ElementAt(1)), TLSResponse, OKResponse };
+            }
+
+            try
+            {
+                Directory.CreateDirectory(_localInboxDirectoryName);
+            }
+            catch(Exception ex)
+            {
+                throw new IOException("couldn't create the local inbox directory. Ensure the application has the correct permissions.", ex);
+            }
+
             _server = new TcpListener(IPAddress.Any, _port);
             _server.Start();
             Log($"server listening on port {_port}");
@@ -107,21 +126,25 @@ namespace DummySMTP
 
         private string FromBytes(byte[] bytes) => Encoding.UTF8.GetString(bytes);
 
-        private string ReadMessage(Stream stream)
+        private bool ReadMessage(Stream stream, out string message)
         {
             int offset = 0;
 
             while (true)
             {
-                stream.Read(_buffer, offset, 1);
+                if(stream.Read(_buffer, offset, 1) == 0)
+                {
+                    message = null;
+                    return true;
+                }
 
                 if (EndOfMessage(offset))
                 {
-                    string message = Sanitize(FromBytes(_buffer.Take(offset).ToArray()));
+                    message = Sanitize(FromBytes(_buffer.Take(offset).ToArray()));
                     _messages.Add(message);
                     Log($"received: {message}");
                     _buffer = new byte[10000];
-                    return message;
+                    return false;
                 }
 
                 ++offset;
@@ -154,18 +177,22 @@ namespace DummySMTP
         private void Read(Stream stream, SslStream secureStream = null)
         {
             bool dataMode = false;
+            string message;
             List<string> emailLines = new List<string>();
 
             while (true)
             {
-                string message = ReadMessage(stream);
+                if(ReadMessage(stream, out message))
+                {
+                    Log("end of stream");
+                    return;
+                }
 
                 if (IsQuitMessage(message))
                 {
                     Log("disconnecting from client");
                     return;
                 }
-
 
                 if (dataMode)
                 {
@@ -178,24 +205,27 @@ namespace DummySMTP
                     else
                     {
                         emailLines.Add(message);
+                        continue;
                     }
                 }
 
                 if (!dataMode)
                 {
                     string[] payload = GetResponsePayload(message);
+
                     Write(stream, payload);
 
                     if (IsBeginDataContentMessage(message))
                     {
                         dataMode = true;
+                        continue;
                     }
                 }
 
-                if (secureStream != null && IsStartTLSMessage(message))
+                if (secureStream != null && IsTlsEnabled && IsStartTLSMessage(message))
                 {
                     Log("initiating TLS handshake");
-                    TlsHandshake(_tlsCertThumbprint, secureStream);
+                    TlsHandshake(secureStream);
                     Log("secure channel initialized");
                     Read(secureStream);
                     return;
@@ -203,23 +233,22 @@ namespace DummySMTP
             }
         }
 
-        private void TlsHandshake(string certThumbprint, SslStream stream)
+        private void TlsHandshake(SslStream stream)
         {
             using (X509Store certStore = new X509Store(StoreName.My, StoreLocation.LocalMachine))
             {
                 Log("opening certificate store");
                 certStore.Open(OpenFlags.ReadOnly);
 
-                using (X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindByThumbprint, certThumbprint, true)[0])
+                using (X509Certificate2 cert = certStore.Certificates.Find(X509FindType.FindByThumbprint, _tlsCertThumbprint, true)[0])
                 {
                     if (cert == null)
                     {
-                        throw new NullReferenceException($"couldn't find certificate with thumbprint: {certThumbprint}");
+                        throw new NullReferenceException($"couldn't find certificate with thumbprint: {_tlsCertThumbprint}");
                     }
 
                     Log($"found certificate with thumbprint: {cert.Thumbprint}");
                     Log("authenticating with certificate");
-
                     stream.AuthenticateAsServer(cert, false, SslProtocols.Tls12, false);
                     Log("authenticated");
                 }
@@ -246,18 +275,17 @@ namespace DummySMTP
 
         private void WriteLog(string content)
         {
-            File.AppendAllText("log.txt", $"{DateTime.Now:G}: {content}\r\n");
+            File.AppendAllText(_logFileName, $"{DateTime.Now:G}: {content}{Environment.NewLine}");
         }
 
         private void SaveEmail(List<string> emailLines)
         {
-            Directory.CreateDirectory("dummy-smtp-inbox");
-            File.AppendAllLines($"dummy-smtp-inbox\\{DateTime.Now:ddMMyyyyHHmmssffffff}.eml", emailLines);
+            File.AppendAllLines($"{_localInboxDirectoryName}\\{DateTime.Now:ddMMyyyyHHmmssffffff}.eml", emailLines);
         }
 
         private const string
             ReadyResponse = "220 Ready"
-            , HelloResponse = "250-server.test.com Hello {0}"
+            , HelloResponse = "250-dummy-smtp-localhost Hello {0}"
             , TLSResponse = "250-STARTTLS"
             , OKResponse = "250 OK"
             , AcceptedResponse = "250 Accepted"
